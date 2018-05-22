@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <type_traits>
 #include <haste/fields_count.hpp>
 
 namespace haste {
@@ -7,14 +8,24 @@ namespace haste {
 using std::string;
 using boost::pfr::detail::fields_count;
 
-template <auto& X, class T> struct json_property {
-  const char* name = X;
-  T value;
+template <auto& X, class T> struct json_property : public T {
+  constexpr static const char* name = X;
 
   public:
-    T* operator->() { return &value; }
 
     json_property& operator=(const T& that) {
+      *this = that;
+      return *this;
+    }
+};
+
+template <auto& X> struct json_property<X, int> {
+  constexpr static const char* name = X;
+  int value;
+
+  public:
+
+    json_property& operator=(const int& that) {
       value = that;
       return *this;
     }
@@ -34,32 +45,36 @@ template <auto& X, class T> struct json_property {
 template<class x> constexpr int type_id = 0;
 template<> constexpr int type_id<int> = 1;
 
-template <class T, int N = fields_count<T>()> struct json;
+template <class T, int N = fields_count<std::decay_t<T>>()> struct json;
 
 struct json_trait {
   template <auto& X, class T> json_trait(const json_property<X, T>& value) {
     this->name = value.name;
-    this->data = &value.value;
+    this->data = &value;
     this->code = type_id<T>;
     if constexpr (type_id<T> == 0) {
-      this->conv = [](string& str, const void* ptr) { json<T>::to(str, *((const T*)ptr)); };
+      this->to = [](string& str, const void* ptr) { json<T>::to(str, *((const T*)ptr)); };
     }
   }
 
   const char* name;
   const void* data;
   size_t code;
-  void (*conv)(string&, const void*);
+  union {
+    void (*to)(string&, const void*);
+    void (*from)(const string&, void*);
+  };
 };
 
 void to_json_impl(string& json, std::initializer_list<json_trait> traits);
+void from_json_impl(const string& json, std::initializer_list<json_trait> traits);
 
 template <class T, int N> struct json {
   template <class... U> static void J(string& j, U&... x) {
     to_json_impl(j, { json_trait(x)... });
   }
 
-  static void to(string& S, const T& v) {
+  static void to(string& S, T v) {
          if constexpr (N == 0) { S += "{}"; }
     else if constexpr (N == 1) { auto& [a] = v; J(S,a); }
     else if constexpr (N == 2) { auto& [a,b] = v; J(S,a,b); }
@@ -71,7 +86,13 @@ template <class T, int N> struct json {
 
 template <class T> string to_json(const T& value) {
   string result;
-  json<T>::to(result, value);
+  json<const T&>::to(result, value);
+  return result;
+}
+
+template <class T> T from_json(string value) {
+  T result;
+  json<T&>::to(result, value);
   return result;
 }
 

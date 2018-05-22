@@ -22,7 +22,7 @@ void to_json_impl(string& json, std::initializer_list<json_trait> traits) {
     json += "\":";
 
     switch (trait.code) {
-      case 0: trait.conv(json, trait.data); break;
+      case 0: trait.to(json, trait.data); break;
       case 1: json += std::to_string(*((int*)trait.data)); break;
     }
 
@@ -57,8 +57,8 @@ unittest() {
   dummy_struct x;
   x.first_field = 1;
   x.second_field = 2;
-  x.third_field->first_field = 3;
-  x.third_field->second_field = 4;
+  x.third_field.first_field = 3;
+  x.third_field.second_field = 4;
 
   assert_eq("{\"first_field\":1,\"second_field\":2,\"third_field\":{\"first_field\":3,\"second_field\":4}}", to_json(x));
 }
