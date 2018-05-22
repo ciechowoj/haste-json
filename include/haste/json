@@ -1,0 +1,78 @@
+#pragma once
+#include <string>
+#include <haste/fields_count.hpp>
+
+namespace haste {
+
+using std::string;
+using boost::pfr::detail::fields_count;
+
+template <auto& X, class T> struct json_property {
+  const char* name = X;
+  T value;
+
+  public:
+    T* operator->() { return &value; }
+
+    json_property& operator=(const T& that) {
+      value = that;
+      return *this;
+    }
+};
+
+// per file uniqueness can be achieved with hashing
+
+#define JSON_PROPERTY_CONCAT(pref, line) pref##line
+
+#define JSON_PROPERTY_HELPER(line, name, type) \
+  static constexpr char JSON_PROPERTY_CONCAT(__string_literal, line)[] = name; \
+  json_property<JSON_PROPERTY_CONCAT(__string_literal, line), type>
+
+#define JSON_PROPERTY(name, type) \
+  JSON_PROPERTY_HELPER(__LINE__, name, type)
+
+template<class x> constexpr int type_id = 0;
+template<> constexpr int type_id<int> = 1;
+
+template <class T, int N = fields_count<T>()> struct json;
+
+struct json_trait {
+  template <auto& X, class T> json_trait(const json_property<X, T>& value) {
+    this->name = value.name;
+    this->data = &value.value;
+    this->code = type_id<T>;
+    if constexpr (type_id<T> == 0) {
+      this->conv = [](string& str, const void* ptr) { json<T>::to(str, *((const T*)ptr)); };
+    }
+  }
+
+  const char* name;
+  const void* data;
+  size_t code;
+  void (*conv)(string&, const void*);
+};
+
+void to_json_impl(string& json, std::initializer_list<json_trait> traits);
+
+template <class T, int N> struct json {
+  template <class... U> static void J(string& j, U&... x) {
+    to_json_impl(j, { json_trait(x)... });
+  }
+
+  static void to(string& S, const T& v) {
+         if constexpr (N == 0) { S += "{}"; }
+    else if constexpr (N == 1) { auto& [a] = v; J(S,a); }
+    else if constexpr (N == 2) { auto& [a,b] = v; J(S,a,b); }
+    else if constexpr (N == 3) { auto& [a,b,c] = v;  J(S,a,b,c); }
+    else if constexpr (N == 4) { auto& [a,b,c,d] = v; J(S,a,b,c,d); }
+    else if constexpr (N == 5) { auto& [a,b,c,d,e] = v; J(S,a,b,c,d,e); }
+  }
+};
+
+template <class T> string to_json(const T& value) {
+  string result;
+  json<T>::to(result, value);
+  return result;
+}
+
+}
