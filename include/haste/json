@@ -24,6 +24,7 @@ template <auto& X> struct json_property<X, int> {
   int value;
 
   public:
+    operator int() { return value; }
 
     json_property& operator=(const int& that) {
       value = that;
@@ -45,54 +46,89 @@ template <auto& X> struct json_property<X, int> {
 template<class x> constexpr int type_id = 0;
 template<> constexpr int type_id<int> = 1;
 
-template <class T, int N = fields_count<std::decay_t<T>>()> struct json;
+template <class R, class T, int N = fields_count<std::decay_t<T>>()> struct json;
 
 struct json_trait {
   template <auto& X, class T> json_trait(const json_property<X, T>& value) {
     this->name = value.name;
-    this->data = &value;
     this->code = type_id<T>;
-    if constexpr (type_id<T> == 0) {
-      this->to = [](string& str, const void* ptr) { json<T>::to(str, *((const T*)ptr)); };
-    }
   }
 
-  const char* name;
-  const void* data;
   size_t code;
+  const char* name;
+  union {
+    void* data;
+    const void* cdata;
+  };
+
   union {
     void (*to)(string&, const void*);
-    void (*from)(const string&, void*);
+    const char* (*from)(const char*, const char*, void*);
   };
 };
 
-void to_json_impl(string& json, std::initializer_list<json_trait> traits);
-void from_json_impl(const string& json, std::initializer_list<json_trait> traits);
+struct json_trait_to : public json_trait {
+  template <auto& X, class T> json_trait_to(const json_property<X, T>& value)
+    : json_trait(value) {
+    this->cdata = &value;
+    if constexpr (type_id<T> == 0) {
+      this->to = [](string& str, const void* ptr) { json<void, const T&>::to(str, *((const T*)ptr)); };
+    }
+  }
+};
 
-template <class T, int N> struct json {
-  template <class... U> static void J(string& j, U&... x) {
-    to_json_impl(j, { json_trait(x)... });
+struct json_trait_from : public json_trait {
+  template <auto& X, class T> json_trait_from(json_property<X, T>& value)
+    : json_trait(value) {
+    this->data = &value;
+    if constexpr (type_id<T> == 0) {
+      this->from = [](const char* itr, const char* end, void* ptr) { return json<const char*, T&>::from(itr, end, *((T*)ptr)); };
+    }
+  }
+};
+
+void to_json_impl(string& json, std::initializer_list<json_trait> traits);
+const char* from_json_impl(const char* itr, const char* end, std::initializer_list<json_trait> traits);
+
+template <class R, class T, int N> struct json {
+  template <class C, class F, class... U> static R A(F f, U&... x) {
+    return f({ C(x)... });
   }
 
-  static void to(string& S, T v) {
-         if constexpr (N == 0) { S += "{}"; }
-    else if constexpr (N == 1) { auto& [a] = v; J(S,a); }
-    else if constexpr (N == 2) { auto& [a,b] = v; J(S,a,b); }
-    else if constexpr (N == 3) { auto& [a,b,c] = v;  J(S,a,b,c); }
-    else if constexpr (N == 4) { auto& [a,b,c,d] = v; J(S,a,b,c,d); }
-    else if constexpr (N == 5) { auto& [a,b,c,d,e] = v; J(S,a,b,c,d,e); }
+  static R to(string& S, T v) {
+    return unpack<json_trait_to>(v, [&](std::initializer_list<json_trait> pack) { return to_json_impl(S, pack); });
+  }
+
+  static R from(const char* itr, const char* end, T v) {
+    return unpack<json_trait_from>(v, [&](std::initializer_list<json_trait> pack) { return from_json_impl(itr, end, pack); });
+  }
+
+  template <class C, class F> static R unpack(T _v, F _f) {
+         if constexpr (N == 0) { return A<C>(_f); }
+    else if constexpr (N == 1) { auto&& [a] = _v; return A<C>(_f,a); }
+    else if constexpr (N == 2) { auto&& [a,b] = _v; return A<C>(_f,a,b); }
+    else if constexpr (N == 3) { auto&& [a,b,c] = _v; return A<C>(_f,a,b,c); }
+    else if constexpr (N == 4) { auto&& [a,b,c,d] = _v; return A<C>(_f,a,b,c,d); }
+    else if constexpr (N == 5) { auto&& [a,b,c,d,e] = _v; return A<C>(_f,a,b,c,d,e); }
+    else if constexpr (N == 6) { auto&& [a,b,c,d,e,f] = _v; return A<C>(_f,a,b,c,d,e,f); }
+    else if constexpr (N == 7) { auto&& [a,b,c,d,e,f,g] = _v; return A<C>(_f,a,b,c,d,e,f,g); }
+    else if constexpr (N == 8) { auto&& [a,b,c,d,e,f,g,h] = _v; return A<C>(_f,a,b,c,d,e,f,g,h); }
+    else if constexpr (N == 9) { auto&& [a,b,c,d,e,f,g,h,i] = _v; return A<C>(_f,a,b,c,d,e,f,g,h,i); }
+    else if constexpr (N == 10) { auto&& [a,b,c,d,e,f,g,h,i,j] = _v; return A<C>(_f,a,b,c,d,e,f,g,h,i,j); }
+    else if constexpr (N == 11) { auto&& [a,b,c,d,e,f,g,h,i,j,k] = _v; return A<C>(_f,a,b,c,d,e,f,g,h,i,j,k); }
+    else if constexpr (N == 12) { auto&& [a,b,c,d,e,f,g,h,i,j,k,l] = _v; return A<C>(_f,a,b,c,d,e,f,g,h,i,j,k,l); }
   }
 };
 
 template <class T> string to_json(const T& value) {
   string result;
-  json<const T&>::to(result, value);
+  json<void, const T&>::to(result, value);
   return result;
 }
 
-template <class T> T from_json(string value) {
+template <class T> T from_json(const string& value) {
   T result;
-  json<T&>::to(result, value);
+  json<const char*, T&>::from(value.data(), value.data() + value.size(), result);
   return result;
 }
 
