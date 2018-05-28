@@ -55,6 +55,28 @@ inline const char* expect_string(const char* itr, const char* end, const char* c
   return itr;
 }
 
+inline const char* skip_string(const char* itr, const char* end, const char* str) {
+  const char* rollback = itr;
+
+  while (itr < end && *str != '\0' && *itr == *str) {
+    ++itr; ++str;
+  }
+
+  if (*str != '\0') {
+    return rollback;
+  }
+
+  return itr;
+}
+
+inline const char* skip_string(const char* itr, const char* end) {
+  while (itr < end && *itr != '"') {
+    ++itr;
+  }
+
+  return itr;
+}
+
 inline const char* expect_char(const char* itr, const char* end, char chr) {
   if (itr < end && *itr == chr) {
     return itr + 1;
@@ -71,50 +93,126 @@ inline const char* skip_char(const char* itr, const char* end, char chr) {
   return itr;
 }
 
+inline const char* expect_string_literal(const char* itr, const char* end) {
+  itr = expect_char(itr, end, '"');
+
+  while (itr < end && *itr != '"') {
+    ++itr;
+  }
+
+  if (itr != end) {
+    return itr + 1;
+  }
+
+  throw std::runtime_error("String literal expected!");
+}
+
+inline const char* expect_json(const char* itr, const char* end) {
+  if (itr < end) {
+    if (*itr == '{') {
+      ++itr;
+
+      while (itr < end && *itr != '}') {
+        itr = skip_spaces(itr, end);
+        itr = expect_string_literal(itr, end);
+        itr = skip_spaces(itr, end);
+        itr = expect_char(itr, end, ':');
+        itr = skip_spaces(itr, end);
+        itr = expect_json(itr, end);
+        itr = skip_spaces(itr, end);
+
+        if (*itr != '}') {
+          itr = expect_char(itr, end, ',');
+        }
+      }
+
+      return expect_char(itr, end, '}');
+    }
+    else if (*itr == '[') {
+      ++itr;
+
+    }
+    else if (isdigit(*itr)) {
+      ++itr;
+
+      while (itr < end && isdigit(*itr)) {
+        ++itr;
+      }
+
+      return itr;
+    }
+    else {
+      throw std::runtime_error("Json expected!");
+    }
+  }
+
+  return itr;
+}
+
 inline const char* from_json_impl(const char* itr, const char* end, std::initializer_list<json_trait> traits) {
   itr = skip_spaces(itr, end);
   itr = expect_char(itr, end, '{');
-  itr = skip_spaces(itr, end);
 
-  auto traitItr = traits.begin();
-  auto traitEnd = traits.end();
-
-  for (; traitItr != traitEnd; ++traitItr) {
-    auto&& trait = *traitItr;
-
-    itr = expect_char(itr, end, '"');
-    itr = expect_string(itr, end, trait.name);
-    itr = expect_char(itr, end, '"');
+  while (itr < end && *itr != '}') {
     itr = skip_spaces(itr, end);
-    itr = expect_char(itr, end, ':');
-    itr = skip_spaces(itr, end);
+    itr = expect_char(itr, end, '"');
 
-    if (itr == end) {
-      throw std::runtime_error("Json error!");
-    }
-    else if (*itr == '{') {
-      itr = trait.from(itr, end, trait.data);
-    }
-    else if (*itr == '}') {
-      break;
-    }
-    else if (isdigit(*itr)) {
-      auto& result = *((int*)trait.data);
-      result = 0;
+    auto traitItr = traits.begin();
+    auto traitEnd = traits.end();
 
-      while (itr < end && isdigit(*itr)) {
-        result *= 10;
-        result += *itr - '0';
-        ++itr;
+    for (; traitItr < traitEnd; ++traitItr) {
+      auto jtr = skip_string(itr, end, traitItr->name);
+
+      if (itr != jtr) {
+        itr = jtr;
+        break;
       }
     }
+
+    if (traitItr == traitEnd) {
+      itr = expect_string_literal(itr - 1, end);
+      itr = skip_spaces(itr, end);
+      itr = expect_char(itr, end, ':');
+      itr = skip_spaces(itr, end);
+      itr = expect_json(itr, end);
+    }
     else {
-      throw std::runtime_error("Json error!");
+      itr = expect_char(itr, end, '"');
+      itr = skip_spaces(itr, end);
+      itr = expect_char(itr, end, ':');
+      itr = skip_spaces(itr, end);
+
+      if (itr == end) {
+        throw std::runtime_error("Json error!");
+      }
+      else if (*itr == '{') {
+        itr = traitItr->from(itr, end, traitItr->data);
+      }
+      else if (isdigit(*itr)) {
+        auto& result = *((int*)traitItr->data);
+        result = 0;
+
+        while (itr < end && isdigit(*itr)) {
+          result *= 10;
+          result += *itr - '0';
+          ++itr;
+        }
+      }
+      else {
+        throw std::runtime_error("Json error!");
+      }
     }
 
     itr = skip_spaces(itr, end);
-    itr = skip_char(itr, end, ',');
-    itr = skip_spaces(itr, end);
+
+    if (*itr != ',') {
+      itr = skip_spaces(itr, end);
+      break;
+    }
+    else {
+      ++itr;
+      itr = skip_spaces(itr, end);
+    }
   }
 
   return expect_char(itr, end, '}');
@@ -153,6 +251,10 @@ unittest("De-serialize simple structure.") {
   auto x = from_json<dummy_nested_struct>("{\"first_field\":1,\"second_field\":2}");
   assert_eq(1, x.first_field);
   assert_eq(2, x.second_field);
+}
+
+unittest("De-serialize simple structure - reject json with missing comma.") {
+  assert_throws([] { from_json<dummy_nested_struct>("{\"first_field\":1\"second_field\":2}"); });
 }
 
 unittest("De-serialize nested structure.") {
@@ -214,6 +316,96 @@ unittest("De-serialize nested structure - members are out of order.") {
   assert_eq(5, x.fifth_field);
   assert_eq(6, x.sixth_field);
   assert_eq(7, x.seventh_field);
+}
+
+unittest("De-serialize nested structure - member should be ignored.") {
+  string json = R"(
+    {
+      "sixth_field": 6,
+      "second_field": 2,
+      "seventh_field": 7,
+      "third_field": 3,
+      "fifth_field": 5,
+      "first_field": 1,
+      "fourth_field": 4,
+      "eight_field": 8,
+    }
+  )";
+
+  auto x = from_json<long_struct>(json);
+  assert_eq(1, x.first_field);
+  assert_eq(2, x.second_field);
+  assert_eq(3, x.third_field);
+  assert_eq(4, x.fourth_field);
+  assert_eq(5, x.fifth_field);
+  assert_eq(6, x.sixth_field);
+  assert_eq(7, x.seventh_field);
+}
+
+unittest("De-serialize an array.") {
+  string json = R"(
+    {
+
+
+      "sixth_field": 6,
+      "second_field": 2,
+      "seventh_field": 7,
+      "third_field": 3,
+      "fifth_field": 5,
+      "first_field": 1,
+      "fourth_field": 4,
+      "eight_field": 8,
+    }
+  )";
+
+  auto x = from_json<long_struct>(json);
+  assert_eq(1, x.first_field);
+  assert_eq(2, x.second_field);
+  assert_eq(3, x.third_field);
+  assert_eq(4, x.fourth_field);
+  assert_eq(5, x.fifth_field);
+  assert_eq(6, x.sixth_field);
+  assert_eq(7, x.seventh_field);
+}
+
+struct vector_struct {
+  JSON_PROPERTY("first_vector", vector<int>) first_vector;
+};
+
+unittest("De-serialize an array.") {
+  string json = R"(
+    {
+      "first_vector": [1, 2, 3, 4, 5, 6]
+    }
+  )";
+
+  auto x = from_json<vector_struct>(json);
+  assert_eq(6, x.first_vector.size());
+  assert_eq(6, x.first_vector[5]);
+}
+
+
+bool validate_json(const string& json) {
+  auto begin = json.data();
+  auto end = begin + json.size();
+  begin = skip_spaces(begin, end);
+  return skip_spaces(expect_json(begin, end), end) == end;
+}
+
+unittest("Validate json.") {
+  string json = R"(
+    {
+      "first_field": 1,
+      "second_field": 2,
+      "third_field":
+      {
+        "first_field": 3,
+        "second_field": 4
+      }
+    }
+  )";
+
+  assert_true(validate_json(json));
 }
 
 }

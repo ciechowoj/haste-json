@@ -1,11 +1,13 @@
 #pragma once
 #include <string>
+#include <vector>
 #include <type_traits>
 #include <haste/fields_count.hpp>
 
 namespace haste {
 
 using std::string;
+using std::vector;
 using boost::pfr::detail::fields_count;
 
 template <auto& X, class T> struct json_property : public T {
@@ -25,6 +27,17 @@ template <auto& X> struct json_property<X, int> {
 
   public:
     operator int() { return value; }
+
+    json_property& operator=(const int& that) {
+      value = that;
+      return *this;
+    }
+};
+
+template <auto& X, class T> struct json_property<X, vector<T>> : public std::vector<T> {
+  constexpr static const char* name = X;
+
+  public:
 
     json_property& operator=(const int& that) {
       value = that;
@@ -131,5 +144,7 @@ template <class T> T from_json(const string& value) {
   json<const char*, T&>::from(value.data(), value.data() + value.size(), result);
   return result;
 }
+
+bool validate_json(const string& json);
 
 }
