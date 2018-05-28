@@ -368,23 +368,6 @@ unittest("De-serialize an array.") {
   assert_eq(7, x.seventh_field);
 }
 
-struct vector_struct {
-  JSON_PROPERTY("first_vector", vector<int>) first_vector;
-};
-
-unittest("De-serialize an array.") {
-  string json = R"(
-    {
-      "first_vector": [1, 2, 3, 4, 5, 6]
-    }
-  )";
-
-  auto x = from_json<vector_struct>(json);
-  assert_eq(6, x.first_vector.size());
-  assert_eq(6, x.first_vector[5]);
-}
-
-
 bool validate_json(const string& json) {
   auto begin = json.data();
   auto end = begin + json.size();

@@ -34,17 +34,6 @@ template <auto& X> struct json_property<X, int> {
     }
 };
 
-template <auto& X, class T> struct json_property<X, vector<T>> : public std::vector<T> {
-  constexpr static const char* name = X;
-
-  public:
-
-    json_property& operator=(const int& that) {
-      value = that;
-      return *this;
-    }
-};
-
 // per file uniqueness can be achieved with hashing
 
 #define JSON_PROPERTY_CONCAT(pref, line) pref##line
@@ -104,16 +93,16 @@ void to_json_impl(string& json, std::initializer_list<json_trait> traits);
 const char* from_json_impl(const char* itr, const char* end, std::initializer_list<json_trait> traits);
 
 template <class R, class T, int N> struct json {
-  template <class C, class F, class... U> static R A(F f, U&... x) {
-    return f({ C(x)... });
-  }
-
   static R to(string& S, T v) {
     return unpack<json_trait_to>(v, [&](std::initializer_list<json_trait> pack) { return to_json_impl(S, pack); });
   }
 
   static R from(const char* itr, const char* end, T v) {
     return unpack<json_trait_from>(v, [&](std::initializer_list<json_trait> pack) { return from_json_impl(itr, end, pack); });
+  }
+
+  template <class C, class F, class... U> static R A(F f, U&... x) {
+    return f({ C(x)... });
   }
 
   template <class C, class F> static R unpack(T _v, F _f) {

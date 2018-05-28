@@ -1,0 +1,159 @@
+#pragma once
+#include <string>
+#include <vector>
+#include <array>
+#include <type_traits>
+#include <haste/fields_count.hpp>
+#include <type_traits>
+
+namespace haste::mark2 {
+
+using std::string;
+using std::vector;
+using boost::pfr::detail::fields_count;
+
+using std::enable_if_t;
+using namespace std;
+
+class appender_t { };
+
+class json_contract { };
+
+template <auto& X, class T> struct json_property : public T {
+  constexpr static const char* name = X;
+
+  public:
+
+    json_property& operator=(const T& that) {
+      *this = that;
+      return *this;
+    }
+};
+
+template <auto& X> struct json_property<X, int> {
+  constexpr static const char* name = X;
+  int value;
+
+  public:
+    operator int() { return value; }
+
+    json_property& operator=(const int& that) {
+      value = that;
+      return *this;
+    }
+};
+
+template <class T, class Enable = void> struct json_convert {
+  static_assert("Unsupported type!");
+};
+
+struct json_property_ref {
+  template <auto& X, class T> json_property_ref(json_property<X, T>& value) {
+    this->_name = value.name;
+    this->_data = &value;
+    this->_cbck = [](const char* i, const char* e, void* p) {
+      return json_convert<T>::from_json(i, e, *((T*)p));
+    };
+  }
+
+  const char* name() const;
+  const char* from_json(const char*, const char*);
+private:
+  const char* _name;
+  void* _data;
+  const char* (*_cbck)(const char*, const char*, void*);
+};
+
+struct json_property_cref {
+  template <auto& X, class T> json_property_cref(const json_property<X, T>& value) {
+    this->_name = value.name;
+    this->_data = &value;
+    this->_cbck = [](appender_t& a, const void* p) {
+      return json_convert<T>::to_json(a, *((const T*)p));
+    };
+  }
+
+  const char* name() const;
+  void to_json(appender_t& appender);
+private:
+  const char* _name;
+  const void* _data;
+  void (*_cbck)(appender_t&, const void*);
+};
+
+struct json_convert_n {
+  static const char* from_json(const char*, const char*, json_property_ref*, json_property_ref*);
+  static void to_json(appender_t& appender, const json_property_cref*, const json_property_cref*);
+};
+
+template <class T> struct json_convert<T, typename std::enable_if_t<std::is_base_of_v<json_contract, T>> > {
+  constexpr static int N = fields_count<std::decay_t<T>>() - 1;
+
+  static const char* from_json(const char* itr, const char* end, T& x) {
+    auto unpacked = unpack<json_property_ref>(x);
+    return json_convert_n::from_json(itr, end, unpacked.data(), unpacked.data() + unpacked.size());
+  }
+
+  static void to_json(appender_t& appender, const T& x) {
+    auto unpacked = unpack<json_property_cref>(x);
+    json_convert_n::to_json(appender, unpacked.data(), unpacked.data() + unpacked.size());
+  }
+
+  template <class C, class... U> static std::array<C, N> A(U&... x) {
+    return std::array { C(x)... };
+  }
+
+  template <class C, class U> static std::array<C, N> unpack(U&& _v) {
+         if constexpr (N == 0) { return A<C>(); }
+    else if constexpr (N == 1) { auto&& [a] = _v; return A<C>(a); }
+    else if constexpr (N == 2) { auto&& [a,b] = _v; return A<C>(a,b); }
+    else if constexpr (N == 3) { auto&& [a,b,c] = _v; return A<C>(a,b,c); }
+    else if constexpr (N == 4) { auto&& [a,b,c,d] = _v; return A<C>(a,b,c,d); }
+    else if constexpr (N == 5) { auto&& [a,b,c,d,e] = _v; return A<C>(a,b,c,d,e); }
+    else if constexpr (N == 6) { auto&& [a,b,c,d,e,f] = _v; return A<C>(a,b,c,d,e,f); }
+    else if constexpr (N == 7) { auto&& [a,b,c,d,e,f,g] = _v; return A<C>(a,b,c,d,e,f,g); }
+    else if constexpr (N == 8) { auto&& [a,b,c,d,e,f,g,h] = _v; return A<C>(a,b,c,d,e,f,g,h); }
+    else if constexpr (N == 9) { auto&& [a,b,c,d,e,f,g,h,i] = _v; return A<C>(a,b,c,d,e,f,g,h,i); }
+    else if constexpr (N == 10) { auto&& [a,b,c,d,e,f,g,h,i,j] = _v; return A<C>(a,b,c,d,e,f,g,h,i,j); }
+    else if constexpr (N == 11) { auto&& [a,b,c,d,e,f,g,h,i,j,k] = _v; return A<C>(a,b,c,d,e,f,g,h,i,j,k); }
+    else if constexpr (N == 12) { auto&& [a,b,c,d,e,f,g,h,i,j,k,l] = _v; return A<C>(a,b,c,d,e,f,g,h,i,j,k,l); }
+  }
+};
+
+template <class Enable> struct json_convert<int, Enable> {
+
+  static const char* from_json(const char*, const char*, int& x);
+
+  static void to_json(appender_t& appender, int x);
+
+};
+
+template <class T> struct json_convert<vector<T>> {
+  static const char* from_json(const char*, const char*, vector<T>& x);
+
+  static void to_json(appender_t& appender, const vector<T>& x);
+};
+
+
+template <class T> string to_json(const T& x) {
+  appender_t appender;
+  json_convert<T>::to_json(appender, x);
+  return string();
+}
+
+template <class T> T from_json(const string& x) {
+  T result;
+  json_convert<T>::from_json(x.data(), x.data() + x.size(), result);
+  return result;
+}
+
+#define JSON_PROPERTY_CONCAT(pref, line) pref##line
+
+#define JSON_PROPERTY_HELPER(line, name, type) \
+  static constexpr char JSON_PROPERTY_CONCAT(__string_literal, line)[] = name; \
+  json_property<JSON_PROPERTY_CONCAT(__string_literal, line), type>
+
+#define JSON_PROPERTY(name, type) \
+  JSON_PROPERTY_HELPER(__LINE__, name, type)
+
+}
