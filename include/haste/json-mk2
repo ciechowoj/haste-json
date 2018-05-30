@@ -15,7 +15,14 @@ using boost::pfr::detail::fields_count;
 using std::enable_if_t;
 using namespace std;
 
-class appender_t { };
+class appender_t {
+public:
+  void push(char x);
+  void push(const char* x);
+  std::string str() const;
+private:
+  string _storage;
+};
 
 class json_contract { };
 
@@ -47,6 +54,20 @@ template <class T, class Enable = void> struct json_convert {
   static_assert("Unsupported type!");
 };
 
+struct json_list_ref {
+  template <class T> json_list_ref(T* itr, T* end) {
+    this->_begin = itr;
+    this->_cbck = [](const char* i, const char* e, void* p) {
+      return json_convert<T>::from_json(i, e, *((T*)p));
+    };
+  }
+
+  const char* from_json(const char*, const char*);
+private:
+  void *_begin, *_end;
+  const char* (*_cbck)(const char*, const char*, void*);
+};
+
 struct json_property_ref {
   template <auto& X, class T> json_property_ref(json_property<X, T>& value) {
     this->_name = value.name;
@@ -74,7 +95,7 @@ struct json_property_cref {
   }
 
   const char* name() const;
-  void to_json(appender_t& appender);
+  void to_json(appender_t& appender) const;
 private:
   const char* _name;
   const void* _data;
@@ -120,25 +141,26 @@ template <class T> struct json_convert<T, typename std::enable_if_t<std::is_base
   }
 };
 
-template <class Enable> struct json_convert<int, Enable> {
-
+template <> struct json_convert<int> {
   static const char* from_json(const char*, const char*, int& x);
-
   static void to_json(appender_t& appender, int x);
-
 };
 
 template <class T> struct json_convert<vector<T>> {
-  static const char* from_json(const char*, const char*, vector<T>& x);
+  static const char* from_json(const char* itr, const char* end, vector<T>& x) {
+    return json_convert_n::from_json(itr, end, json_list_ref(x.data(), x.data() + x.size()));
+  }
 
-  static void to_json(appender_t& appender, const vector<T>& x);
+  static void to_json(appender_t& appender, const vector<T>& x) {
+    json_convert_n::to_json(appender, json_list_cref(x));
+  }
 };
 
 
 template <class T> string to_json(const T& x) {
   appender_t appender;
   json_convert<T>::to_json(appender, x);
-  return string();
+  return appender.str();
 }
 
 template <class T> T from_json(const string& x) {
