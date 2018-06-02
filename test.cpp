@@ -1,5 +1,6 @@
 #include <haste/test>
 #include <haste/json-mk2>
+#include <iostream>
 
 using namespace haste;
 using namespace haste::mark2;
@@ -166,6 +167,14 @@ unittest("De-serialize an array.") {
 }
 
 unittest("Array serialization.") {
+
+
+  for (auto&& x : from_json<vector<int>>("[1,2,3,4,5]")) {
+    std::cout << x << std::endl;
+  }
+
+  std::cout << to_json(from_json<vector<int>>("[1,2,3,4,5]")) << std::endl;
+
   assert_json_fro_and_to<vector<int>>("[1,2,3,4,5]");
 }
 

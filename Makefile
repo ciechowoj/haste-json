@@ -7,10 +7,9 @@ INCLUDE_DIRS = -Iinclude -Ibackward-cpp -I../haste-test/include
 CXXFLAGS := $(CXXFLAGS) $(INCLUDE_DIRS)
 
 SOURCE_FILES = $(wildcard *.cpp)
-SOURCE_FILES := $(filter-out test.cpp, $(SOURCE_FILES))
 HEADER_FILES = $(wildcard include/haste/*)
-OBJECT_FILES = $(SOURCE_FILES:%.cpp=build/%.o)
-OBJECT_FILES := $(filter-out build/test.o, $(OBJECT_FILES))
+ALL_OBJECT_FILES = $(SOURCE_FILES:%.cpp=build/%.o)
+OBJECT_FILES := $(filter-out build/test.o, $(ALL_OBJECT_FILES))
 
 DEPENDENCY_FLAGS = -MT $@ -MMD -MP -MF build/$*.Td
 DEPENDENCY_POST = mv -f build/$*.Td build/$*.d
@@ -37,13 +36,15 @@ build/%.o: %.cpp build/%.d | build
 	$(CXX) -c $(DEPENDENCY_FLAGS) $(CXXFLAGS) $< -o $@
 	$(DEPENDENCY_POST)
 
-build/libhaste.a: $(OBJECT_FILES) Makefile
-	ar rcs build/libhaste.a $(OBJECT_FILES)
+-include $(ALL_OBJECT_FILES:build/%.o=build/%.d)
 
-build/test.bin: build/libhaste.a build/test.o Makefile
-	$(CXX) -g $(DEPENDENCY_FLAGS) $(OBJECT_FILES) build/test.o -L../haste-test/build -lhaste-test -ldw -lpng -o build/test.bin
+build/libhaste-json.a: $(OBJECT_FILES) Makefile
+	ar rcs build/libhaste-json.a $(OBJECT_FILES)
 
--include $(OBJECT_FILES:build/%.o=build/%.d)
+build/test.bin: build/libhaste-json.a build/test.o Makefile
+	$(CXX) -g build/test.o -L../haste-test/build -Lbuild -lhaste-test -lhaste-json -ldw -lpng -o build/test.bin
+
+
 
 
 

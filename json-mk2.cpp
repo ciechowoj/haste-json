@@ -21,16 +21,41 @@ string appender_t::str() const {
   return _storage;
 }
 
-const char* json_property_ref::name() const {
-  return _name;
+/* const char* json_list_ref::from_json(const char* itr, const char* end) const {
+  itr = expect_char(itr, end, '[');
+
+  while (itr < end) {
+
+  }
+
+
+  itr = expect_char(itr, end, ']');
+  return itr;
+} */
+
+void json_list_cref::to_json(appender_t& appender) const {
+  appender.push('[');
+
+  auto itr = (const char*)_begin;
+  auto end = (const char*)_end;
+
+  if (itr < end) {
+    _cbck(appender, itr);
+    itr += _item_size;
+  }
+
+  while (itr < end) {
+    appender.push(',');
+    _cbck(appender, itr);
+    itr += _item_size;
+  }
+
+  appender.push(']');
+
 }
 
 const char* json_property_ref::from_json(const char* itr, const char* end) {
   return _cbck(itr, end, _data);
-}
-
-const char* json_property_cref::name() const {
-  return _name;
 }
 
 void json_property_cref::to_json(appender_t& appender) const {
@@ -151,6 +176,31 @@ inline const char* expect_json(const char* itr, const char* end) {
   return itr;
 }
 
+const char* json_convert_n::from_json(
+  const char* itr,
+  const char* end,
+  void* container,
+  const char* (*cbck)(const char*, const char*, void*)) {
+  itr = expect_char(itr, end, '[');
+
+  while (itr < end && *itr != ']') {
+    itr = skip_spaces(itr, end);
+    itr = cbck(itr, end, container);
+    itr = skip_spaces(itr, end);
+
+    if (*itr != ',') {
+      itr = skip_spaces(itr, end);
+      break;
+    }
+    else {
+      ++itr;
+      itr = skip_spaces(itr, end);
+    }
+  }
+
+  return expect_char(itr, end, ']');
+}
+
 const char* json_convert_n::from_json(const char* itr, const char* end, json_property_ref* prop_begin, json_property_ref* prop_end) {
   itr = skip_spaces(itr, end);
   itr = expect_char(itr, end, '{');
@@ -162,7 +212,7 @@ const char* json_convert_n::from_json(const char* itr, const char* end, json_pro
     auto prop_itr = prop_begin;
 
     for (; prop_itr < prop_end; ++prop_itr) {
-      auto jtr = skip_string(itr, end, prop_itr->name());
+      auto jtr = skip_string(itr, end, prop_itr->name);
 
       if (itr != jtr) {
         itr = jtr;
@@ -211,7 +261,7 @@ void json_convert_n::to_json(appender_t& appender, const json_property_cref* itr
 
   for (; itr != end; ++itr) {
     appender.push('"');
-    appender.push(itr->name());
+    appender.push(itr->name);
     appender.push("\":");
 
     itr->to_json(appender);

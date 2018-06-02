@@ -25,7 +25,6 @@
           "cmd":
           [
             "make",
-            "-s",
             "test"
           ],
           "name": "Test.",
