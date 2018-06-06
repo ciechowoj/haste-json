@@ -15,17 +15,48 @@ void assert_json_fro_and_to(const string& x, call_site_t site = {}) {
   assert_eq(y, x, site);
 }
 
-
-struct dummy_nested_struct : public json_contract {
+struct dummy_nested_struct {
   JSON_PROPERTY("first_field", int) first_field;
   JSON_PROPERTY("second_field", int) second_field;
 };
 
-struct dummy_struct : public json_contract {
+struct dummy_struct_with_string {
+  JSON_PROPERTY("first_field", int) first_field;
+  JSON_PROPERTY("second_field", std::string) second_field;
+};
+
+struct dummy_struct {
   JSON_PROPERTY("first_field", int) first_field;
   JSON_PROPERTY("second_field", int) second_field;
   JSON_PROPERTY("third_field", dummy_nested_struct) third_field;
 };
+
+struct test_struct {
+  JSON_PROPERTY("first_field", int) first_field;
+  JSON_PROPERTY("second_field", int) second_field;
+  JSON_PROPERTY("first_field", int) third_field;
+};
+
+struct test_struct2 {
+  JSON_PROPERTY("first_field", int) first_field;
+  JSON_PROPERTY("second_field", int) second_field;
+  JSON_PROPERTY("third_field", test_struct) third_field;
+};
+
+struct test_struct_no_json {
+  int first_field;
+};
+
+unittest("Test has_json_property_type_trait.") {
+  static_assert(has_json_property_at_n<0, test_struct>::value);
+  static_assert(has_json_property<test_struct>);
+  static_assert(!has_json_property<test_struct_no_json>);
+  // static_assert(has_json_property<dummy_struct_with_string>);
+  // static_assert(has_json_property<std::vector<int>>);
+
+  static_assert(std::is_standard_layout<std::vector<int>>::value);
+  std::cout << sizeof(std::vector<int>) * 8 << "\n";
+}
 
 unittest("Serialize simple structure.") {
   dummy_nested_struct x;
@@ -83,7 +114,7 @@ unittest("De-serialize nested structure - white-spaces.") {
   assert_eq(4, x.third_field.second_field);
 }
 
-struct long_struct : public json_contract {
+struct long_struct {
   JSON_PROPERTY("first_field", int) first_field;
   JSON_PROPERTY("second_field", int) second_field;
   JSON_PROPERTY("third_field", int) third_field;
@@ -143,8 +174,6 @@ unittest("De-serialize nested structure - member should be ignored.") {
 unittest("De-serialize an array.") {
   string json = R"(
     {
-
-
       "sixth_field": 6,
       "second_field": 2,
       "seventh_field": 7,
@@ -166,16 +195,14 @@ unittest("De-serialize an array.") {
   assert_eq(7, x.seventh_field);
 }
 
+unittest("Integer serialization.") {
+  assert_json_fro_and_to<int>("-123456789");
+}
+
 unittest("Array serialization.") {
-
-
-  for (auto&& x : from_json<vector<int>>("[1,2,3,4,5]")) {
-    std::cout << x << std::endl;
-  }
-
-  std::cout << to_json(from_json<vector<int>>("[1,2,3,4,5]")) << std::endl;
-
   assert_json_fro_and_to<vector<int>>("[1,2,3,4,5]");
 }
+
+
 
 

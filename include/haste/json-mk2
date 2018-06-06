@@ -4,7 +4,7 @@
 #include <array>
 #include <type_traits>
 #include <haste/fields_count.hpp>
-#include <type_traits>
+#include <utility>
 
 namespace haste::mark2 {
 
@@ -19,12 +19,11 @@ class appender_t {
 public:
   void push(char x);
   void push(const char* x);
+  void push(const char* i, const char* e);
   std::string str() const;
 private:
   string _storage;
 };
-
-class json_contract { };
 
 template <auto& X, class T> struct json_property : public T {
   constexpr static const char* name = X;
@@ -49,20 +48,66 @@ template <auto& X> struct json_property<X, int> {
     }
 };
 
+template <auto& X, class T> struct json_property<X, T[]> {
+  constexpr static const char* name = X;
+  int value;
+
+  public:
+    operator int() { return value; }
+
+    json_property& operator=(const int& that) {
+      value = that;
+      return *this;
+    }
+};
+
 template <class T, class Enable = void> struct json_convert {
   static_assert("Unsupported type!");
 };
 
-struct json_ref_base {
-  template <class T> json_ref_base(T*) {
-    this->_cbck = [](const char* i, const char* e, void* p) {
-      return json_convert<T>::from_json(i, e, *((T*)p));
-    };
-  }
-
-protected:
-  const char* (*_cbck)(const char*, const char*, void*);
+template <class T> struct is_json_property {
+  constexpr static bool value = false;
 };
+
+template <auto& X, class T> struct is_json_property<json_property<X, T>> {
+  constexpr static bool value = true;
+};
+
+
+template <int N, class T> struct has_json_property_at_n {
+
+  template <int M> struct helper {
+    template <class U, typename std::enable_if_t<M != N || is_json_property<U>::value, int> = 0> constexpr operator U&();
+  };
+
+
+  template <std::size_t... Is, class Q = decltype(T { helper<Is>{} ...  })>
+    static constexpr auto eval(std::index_sequence<Is...>) { return true; }
+
+  static constexpr auto eval(...) { return false; }
+
+  static constexpr bool value = eval(std::make_index_sequence<fields_count<T>()>());
+};
+
+template <class T, class Enable = void> struct has_json_property_t {
+  static constexpr bool value = false;
+};
+
+template <class T> struct has_json_property_t<T, typename std::enable_if_t<std::is_aggregate<T>::value>> {
+  static constexpr int N = fields_count<T>();
+
+  template <std::size_t... Is>
+    static constexpr auto eval(std::index_sequence<Is...>) {
+      return (has_json_property_at_n<Is, T>::value || ...);
+    }
+
+  static constexpr bool value = eval(std::make_index_sequence<N>());
+};
+
+
+template <class T> constexpr bool has_json_property = has_json_property_t<T>::value;
+template <class T> constexpr bool is_json_struct = has_json_property_t<T>::value;
+
 
 struct json_cref_base {
   template <class T> json_cref_base(const T*) {
@@ -122,13 +167,12 @@ private:
 
 struct json_convert_n {
   static const char* from_json(const char*, const char*, void*, const char* (*)(const char*, const char*, void*));
-
   static const char* from_json(const char*, const char*, json_property_ref*, json_property_ref*);
   static void to_json(appender_t& appender, const json_property_cref*, const json_property_cref*);
 };
 
-template <class T> struct json_convert<T, typename std::enable_if_t<std::is_base_of_v<json_contract, T>> > {
-  constexpr static int N = fields_count<std::decay_t<T>>() - 1;
+template <class T> struct json_convert<T, typename std::enable_if_t<has_json_property<T>> > {
+  constexpr static int N = fields_count<std::decay_t<T>>();
 
   static const char* from_json(const char* itr, const char* end, T& x) {
     auto unpacked = unpack<json_property_ref>(x);

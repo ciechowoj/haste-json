@@ -17,21 +17,14 @@ void appender_t::push(const char* x) {
   _storage.append(x);
 }
 
+void appender_t::push(const char* i, const char* e) {
+  _storage.append(i, e);
+}
+
+
 string appender_t::str() const {
   return _storage;
 }
-
-/* const char* json_list_ref::from_json(const char* itr, const char* end) const {
-  itr = expect_char(itr, end, '[');
-
-  while (itr < end) {
-
-  }
-
-
-  itr = expect_char(itr, end, ']');
-  return itr;
-} */
 
 void json_list_cref::to_json(appender_t& appender) const {
   appender.push('[');
@@ -280,6 +273,12 @@ const char* json_convert<int>::from_json(
   int& x) {
   const char* rollback = itr;
   int result = 0;
+  int sign = 1;
+
+  if (itr < end && *itr == '-') {
+    sign = -1;
+    ++itr;
+  }
 
   while (itr < end && isdigit(*itr)) {
     result *= 10;
@@ -288,19 +287,20 @@ const char* json_convert<int>::from_json(
   }
 
   if (itr != rollback) {
-    x = result;
+    x = result * sign;
   }
 
   return itr;
 }
 
 void json_convert<int>::to_json(appender_t& appender, int x) {
-  if (x == 0) {
-    appender.push('0');
-  }
-  else {
-    appender.push(x + '0');
-  }
+  char buffer[12];
+  int num = sprintf(buffer, "%d", x);
+  appender.push(buffer, buffer + num);
+
+  /* char buffer[11];
+  auto result = to_chars(buffer, buffer + sizeof(buffer), x);
+  appender.push(buffer, result.ptr);*/
 }
 
 }
