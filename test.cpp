@@ -4,15 +4,10 @@
 
 using namespace haste;
 using namespace haste::mark2;
+using std::string;
 
 int main() {
   return haste::run_all_tests() ? 0 : 1;
-}
-
-template <class T>
-void assert_json_fro_and_to(const string& x, call_site_t site = {}) {
-  auto y = to_json(from_json<T>(x));
-  assert_eq(y, x, site);
 }
 
 struct dummy_nested_struct {
@@ -51,7 +46,7 @@ unittest("Test has_json_property_type_trait.") {
   static_assert(has_json_property_at_n<0, test_struct>::value);
   static_assert(has_json_property<test_struct>);
   static_assert(!has_json_property<test_struct_no_json>);
-  // static_assert(has_json_property<dummy_struct_with_string>);
+  static_assert(has_json_property<dummy_struct_with_string>);
   // static_assert(has_json_property<std::vector<int>>);
 
   static_assert(std::is_standard_layout<std::vector<int>>::value);
@@ -196,13 +191,120 @@ unittest("De-serialize an array.") {
 }
 
 unittest("Integer serialization.") {
-  assert_json_fro_and_to<int>("-123456789");
+  assert_eq(-123456789, from_json<int>("-123456789"));
 }
 
 unittest("Array serialization.") {
-  assert_json_fro_and_to<vector<int>>("[1,2,3,4,5]");
+  assert_eq(vector<int> { 1, 2, 3, 4, 5 }, from_json<vector<int>>("[1,2,3,4,5]"));
+  assert_eq("[1,2,3,4,5]", to_json(vector<int> { 1, 2, 3, 4, 5 }));
 }
 
+
+struct date_t {
+  JSON_PROPERTY("day", int) day;
+  JSON_PROPERTY("month", int) month;
+  JSON_PROPERTY("year", int) year;
+};
+
+struct employee_t {
+  JSON_PROPERTY("first_name", std::string) first_name;
+  JSON_PROPERTY("second_name", std::string) second_name;
+  JSON_PROPERTY("employed_date", date_t) employed_date;
+  JSON_PROPERTY("salary", int) salary;
+  JSON_PROPERTY("level", std::string) level;
+};
+
+struct team_t {
+  JSON_PROPERTY("name", std::string) name;
+  JSON_PROPERTY("employees", vector<employee_t>) employees;
+};
+
+unittest("Serialize team description.") {
+  team_t highly_trained_monkeys {
+    "Highly Trained Monkeys",
+    vector<employee_t> {
+      { "Maxymilian", "Debeściak", { 10, 12, 1999 }, 13000, "Software Engineer" },
+      { "Boris", "Dracula", { 13, 3, 1742 }, 12345, "Quality Assurance Engineer" },
+      { "Jakub", "Wyndrowycz", { 1, 1, 1900 }, 100, "Senior Software Engineer" },
+      { "Major", "Major", { 10, 9, 1988 }, 1000, "Principal Software Engineering Manager" },
+      { "Maniek", "Kombinerka", { 7, 7, 1977 }, 420000, "Janitor" },
+    }
+  };
+
+  const char* expected = R"foo(
+  {
+    "name": "Highly Trained Monkeys",
+    "employees":
+    [
+      {
+        "first_name": "Maxymilian",
+        "second_name": "Debeściak",
+        "employed_date": { "day": 10, "month": 12, "year": 1999},
+        "salary": 13000, "level": "Software Engineer"
+      },
+      {
+        "first_name": "Boris",
+        "second_name": "Dracula",
+        "employed_date": { "day": 13, "month": 3, "year": 1742},
+        "salary": 12345,
+        "level": "Quality Assurance Engineer"
+      },
+      {
+        "first_name": "Jakub",
+        "second_name": "Wyndrowycz",
+        "employed_date": { "day": 1, "month": 1,"year": 1900},
+        "salary": 100,
+        "level": "Senior Software Engineer"
+      },
+      {
+        "first_name": "Major",
+        "second_name": "Major",
+        "employed_date": {"day": 10, "month": 9, "year":1988 },
+        "salary": 1000,
+        "level": "Principal Software Engineering Manager"
+      },
+      {
+        "first_name": "Maniek",
+        "second_name":"Kombinerka",
+        "employed_date": { "day": 7, "month": 7, "year": 1977 },
+        "salary": 420000,
+        "level": "Janitor"
+      }
+    ]
+  })foo";
+
+  assert_almost_eq(expected, to_json(highly_trained_monkeys));
+}
+
+unittest("De-serialize team description.") {
+  auto team = from_json<team_t>(R"foo(
+  {
+    "name": "Highly Trained Monkeys",
+    "employees":
+    [
+      {
+        "first_name": "Maxymilian",
+        "second_name": "Debeściak",
+        "employed_date": { "day": 10, "month": 12, "year": 1999},
+        "salary": 13000, "level": "Software Engineer"
+      }
+    ]
+  })foo");
+
+
+  assert_eq(team.name, "Highly Trained Monkeys");
+  assert_eq(team.employees.size(), 1u);
+  assert_eq(team.employees[0].first_name, "Maxymilian");
+  assert_eq(team.employees[0].second_name, "Debeściak");
+  assert_eq(team.employees[0].employed_date.day, 10);
+  assert_eq(team.employees[0].salary, 13000);
+  assert_eq(team.employees[0].level, "Software Engineer");
+}
+
+unittest("No runtime space overhead.") {
+  static_assert(sizeof(date_t) == sizeof(int) * 3);
+  static_assert(sizeof(employee_t) == sizeof(std::string) * 3 + sizeof(date_t) + sizeof(int));
+}
 
 
 

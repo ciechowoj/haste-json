@@ -214,6 +214,11 @@ template <> struct json_convert<int> {
   static void to_json(appender_t& appender, int x);
 };
 
+template <> struct json_convert<std::string> {
+  static const char* from_json(const char*, const char*, std::string& x);
+  static void to_json(appender_t& appender, const std::string& x);
+};
+
 template <class T> struct json_convert<vector<T>> {
   static const char* from_json(const char* itr, const char* end, vector<T>& x) {
     return json_convert_n::from_json(

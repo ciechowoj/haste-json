@@ -297,10 +297,30 @@ void json_convert<int>::to_json(appender_t& appender, int x) {
   char buffer[12];
   int num = sprintf(buffer, "%d", x);
   appender.push(buffer, buffer + num);
-
-  /* char buffer[11];
-  auto result = to_chars(buffer, buffer + sizeof(buffer), x);
-  appender.push(buffer, result.ptr);*/
 }
+
+
+const char* json_convert<std::string>::from_json(
+  const char* itr,
+  const char* end,
+  std::string& x) {
+
+
+  itr = skip_spaces(itr, end);
+  itr = expect_char(itr, end, '"');
+
+  while (itr < end && *itr != '"') {
+    x.push_back(*itr++);
+  }
+
+  return expect_char(itr, end, '"');
+}
+
+void json_convert<std::string>::to_json(appender_t& appender, const std::string& x) {
+  appender.push("\"");
+  appender.push(x.c_str());
+  appender.push("\"");
+}
+
 
 }
