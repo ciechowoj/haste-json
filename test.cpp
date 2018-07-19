@@ -1,5 +1,5 @@
 #include <haste/test>
-#include <haste/json-mk2>
+#include <haste/json>
 #include <iostream>
 
 using namespace haste;
