@@ -1,5 +1,5 @@
 #include <haste/test>
-#include <haste/json>
+#include <haste/json.hpp>
 
 #include <vector>
 #include <iostream>
@@ -299,6 +299,13 @@ void json_convert<int>::to_json(appender_t& appender, int x) {
   appender.push(buffer, buffer + num);
 }
 
+const char* json_convert<double>::from_json(const char*, const char*, double& x) {
+  return nullptr;
+}
+
+void json_convert<double>::to_json(appender_t& appender, double x) {
+
+}
 
 const char* json_convert<std::string>::from_json(
   const char* itr,
@@ -322,5 +329,24 @@ void json_convert<std::string>::to_json(appender_t& appender, const std::string&
   appender.push("\"");
 }
 
+string read_file(const string& path) {
+  FILE* file = std::fopen(path.c_str(), "rb");
+
+  if(!file) {
+    throw std::runtime_error("Failed to open file \"" + path + "\".");
+  }
+
+  std::fseek(file, 0, SEEK_END);
+  std::size_t size = std::ftell(file);
+  std::fseek(file, 0, SEEK_SET);
+
+  string result;
+  result.resize(size);
+
+  std::fread(result.data(), sizeof(uint8_t), result.size(), file);
+  std::fclose(file);
+
+  return result;
+}
 
 }

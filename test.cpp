@@ -1,5 +1,5 @@
 #include <haste/test>
-#include <haste/json>
+#include <haste/json.hpp>
 #include <iostream>
 
 using namespace haste;
@@ -207,8 +207,7 @@ struct date_t {
 };
 
 struct employee_t {
-  JSON_PROPERTY("first_name", std::string) first_name;
-  JSON_PROPERTY("second_name", std::string) second_name;
+  JSON_PROPERTY("name", std::string) name;
   JSON_PROPERTY("employed_date", date_t) employed_date;
   JSON_PROPERTY("salary", int) salary;
   JSON_PROPERTY("level", std::string) level;
@@ -216,18 +215,16 @@ struct employee_t {
 
 struct team_t {
   JSON_PROPERTY("name", std::string) name;
-  JSON_PROPERTY("employees", vector<employee_t>) employees;
+  JSON_PROPERTY("employees", std::vector<employee_t>) employees;
 };
 
 unittest("Serialize team description.") {
   team_t highly_trained_monkeys {
     "Highly Trained Monkeys",
     vector<employee_t> {
-      { "Maxymilian", "Debeściak", { 10, 12, 1999 }, 13000, "Software Engineer" },
-      { "Boris", "Dracula", { 13, 3, 1742 }, 12345, "Quality Assurance Engineer" },
-      { "Jakub", "Wyndrowycz", { 1, 1, 1900 }, 100, "Senior Software Engineer" },
-      { "Major", "Major", { 10, 9, 1988 }, 1000, "Principal Software Engineering Manager" },
-      { "Maniek", "Kombinerka", { 7, 7, 1977 }, 420000, "Janitor" },
+      { "Maxymilian Debeściak", { 10, 12, 1999 }, 13000, "Software Engineer" },
+      { "Geralt of Rivia", { 13, 3, 1742 }, 12345, "QA Engineer / Witcher" },
+      { "Jakub Wyndrowycz", { 1, 1, 1900 }, 100, "Amateur Exorcist" }
     }
   };
 
@@ -237,38 +234,21 @@ unittest("Serialize team description.") {
     "employees":
     [
       {
-        "first_name": "Maxymilian",
-        "second_name": "Debeściak",
+        "name": "Maxymilian Debeściak",
         "employed_date": { "day": 10, "month": 12, "year": 1999},
         "salary": 13000, "level": "Software Engineer"
       },
       {
-        "first_name": "Boris",
-        "second_name": "Dracula",
+        "name": "Geralt of Rivia",
         "employed_date": { "day": 13, "month": 3, "year": 1742},
         "salary": 12345,
-        "level": "Quality Assurance Engineer"
+        "level": "QA Engineer / Witcher"
       },
       {
-        "first_name": "Jakub",
-        "second_name": "Wyndrowycz",
+        "name": "Jakub Wyndrowycz",
         "employed_date": { "day": 1, "month": 1,"year": 1900},
         "salary": 100,
-        "level": "Senior Software Engineer"
-      },
-      {
-        "first_name": "Major",
-        "second_name": "Major",
-        "employed_date": {"day": 10, "month": 9, "year":1988 },
-        "salary": 1000,
-        "level": "Principal Software Engineering Manager"
-      },
-      {
-        "first_name": "Maniek",
-        "second_name":"Kombinerka",
-        "employed_date": { "day": 7, "month": 7, "year": 1977 },
-        "salary": 420000,
-        "level": "Janitor"
+        "level": "Amateur Exorcist"
       }
     ]
   })foo";
@@ -283,19 +263,16 @@ unittest("De-serialize team description.") {
     "employees":
     [
       {
-        "first_name": "Maxymilian",
-        "second_name": "Debeściak",
+        "name": "Maxymilian Debeściak",
         "employed_date": { "day": 10, "month": 12, "year": 1999},
         "salary": 13000, "level": "Software Engineer"
       }
     ]
   })foo");
 
-
   assert_eq(team.name, "Highly Trained Monkeys");
   assert_eq(team.employees.size(), 1u);
-  assert_eq(team.employees[0].first_name, "Maxymilian");
-  assert_eq(team.employees[0].second_name, "Debeściak");
+  assert_eq(team.employees[0].name, "Maxymilian Debeściak");
   assert_eq(team.employees[0].employed_date.day, 10);
   assert_eq(team.employees[0].salary, 13000);
   assert_eq(team.employees[0].level, "Software Engineer");
@@ -303,7 +280,7 @@ unittest("De-serialize team description.") {
 
 unittest("No runtime space overhead.") {
   static_assert(sizeof(date_t) == sizeof(int) * 3);
-  static_assert(sizeof(employee_t) == sizeof(std::string) * 3 + sizeof(date_t) + sizeof(int));
+  static_assert(sizeof(employee_t) == sizeof(std::string) * 2 + sizeof(date_t) + sizeof(int));
 }
 
 
