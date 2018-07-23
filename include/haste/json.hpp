@@ -108,6 +108,16 @@ template <class T> struct has_json_property_t<T, typename std::enable_if_t<std::
 template <class T> constexpr bool has_json_property = has_json_property_t<T>::value;
 template <class T> constexpr bool is_json_struct = has_json_property_t<T>::value;
 
+struct json_ref_base {
+  template <class T> json_ref_base(T*) {
+    this->_cbck = [](const char* i, const char* e, void* p) {
+      return json_convert<T>::from_json(i, e, *((T*)p));
+    };
+  }
+
+protected:
+  const char* (*_cbck)(const char*, const char*, void*);
+};
 
 struct json_cref_base {
   template <class T> json_cref_base(const T*) {
@@ -118,6 +128,19 @@ struct json_cref_base {
 
 protected:
   void (*_cbck)(appender_t&, const void*);
+};
+
+struct json_list_ref : private json_ref_base {
+  template <class T> json_list_ref(T* begin, T* end)
+    : json_ref_base(begin)
+    , _item_size(sizeof(T))
+    , _begin(begin)
+    , _end(end) { }
+
+  const char* from_json(const char*, const char*) const;
+private:
+  size_t _item_size;
+  void *_begin, *_end;
 };
 
 struct json_list_cref : private json_cref_base {
@@ -244,15 +267,7 @@ template <class T> struct json_convert<vector<T>> {
 
 template <class T, size_t N> struct json_convert<array<T, N>> {
   static const char* from_json(const char* itr, const char* end, array<T, N>& x) {
-    return json_convert_n::from_json(
-      itr,
-      end,
-      &x,
-      [](const char* i, const char* e, void* c) {
-        auto container = ((vector<T>*)c);
-        container->emplace_back();
-        return json_convert<T>::from_json(i, e, container->back());
-      });
+    return json_list_ref(x.data(), x.data() + x.size()).from_json(itr, end);
   }
 
   static void to_json(appender_t& appender, const array<T, N>& x) {

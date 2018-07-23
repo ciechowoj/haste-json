@@ -27,15 +27,6 @@ struct collection_t {
   JSON_PROPERTY("features", vector<feature_t>) features;
 };
 
-
-
 unittest() {
-
   auto actual = from_json<collection_t>(read_file("data/canada.json"));
-  // auto actual = read_file("data/canada.json");
-
-  // std::cout << actual << "\n";
-
-
-
 }

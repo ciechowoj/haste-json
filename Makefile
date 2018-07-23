@@ -2,8 +2,7 @@
 CXX = g++-7
 CXXFLAGS = -march=native -g -O0 -Wall -Wextra -ansi -pedantic -std=c++17
 
-INCLUDE_DIRS = -Iinclude -Ibackward-cpp -I../haste-test/include
-
+INCLUDE_DIRS = -Iinclude -Ibackward-cpp -I../haste-test/include -Idouble-conversion
 CXXFLAGS := $(CXXFLAGS) $(INCLUDE_DIRS)
 
 SOURCE_FILES = $(wildcard *.cpp)
@@ -59,10 +58,10 @@ build/libhaste-json.a: $(OBJECT_FILES) Makefile
 	ar rcs build/libhaste-json.a $(OBJECT_FILES)
 
 build/test.bin: build/libhaste-json.a $(UNITTESTS_OBJECT_FILES) build/test.o Makefile
-	$(CXX) -g $(UNITTESTS_OBJECT_FILES) build/test.o -L../haste-test/build -Lbuild -lhaste-test -lhaste-json -o build/test.bin
+	$(CXX) -g $(UNITTESTS_OBJECT_FILES) build/test.o -L../haste-test/build -Ldouble-conversion/build  -Lbuild -lhaste-test -lhaste-json -ldouble-conversion -o build/test.bin
 
 build/benchmark.bin: build/libhaste-json.a $(BENCHMARK_OBJECT_FILES) Makefile
-	$(CXX) -g $(BENCHMARK_OBJECT_FILES) -L../haste-test/build -Lbuild -lhaste-test -lhaste-json -o build/benchmark.bin
+	$(CXX) -g $(BENCHMARK_OBJECT_FILES) -L../haste-test/build -Lbuild -Ldouble-conversion/build -lhaste-test -lhaste-json -ldouble-conversion -o build/benchmark.bin
 
 
 

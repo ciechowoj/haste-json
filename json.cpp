@@ -1,6 +1,6 @@
 #include <haste/test>
 #include <haste/json.hpp>
-
+#include <double-conversion/double-conversion.h>
 #include <vector>
 #include <iostream>
 #include <cctype>
@@ -21,38 +21,8 @@ void appender_t::push(const char* i, const char* e) {
   _storage.append(i, e);
 }
 
-
 string appender_t::str() const {
   return _storage;
-}
-
-void json_list_cref::to_json(appender_t& appender) const {
-  appender.push('[');
-
-  auto itr = (const char*)_begin;
-  auto end = (const char*)_end;
-
-  if (itr < end) {
-    _cbck(appender, itr);
-    itr += _item_size;
-  }
-
-  while (itr < end) {
-    appender.push(',');
-    _cbck(appender, itr);
-    itr += _item_size;
-  }
-
-  appender.push(']');
-
-}
-
-const char* json_property_ref::from_json(const char* itr, const char* end) {
-  return _cbck(itr, end, _data);
-}
-
-void json_property_cref::to_json(appender_t& appender) const {
-  _cbck(appender, _data);
 }
 
 inline const char* skip_spaces(const char* itr, const char* end) {
@@ -167,6 +137,65 @@ inline const char* expect_json(const char* itr, const char* end) {
   }
 
   return itr;
+}
+
+const char* json_list_ref::from_json(const char* itr, const char* end) const {
+  itr = expect_char(itr, end, '[');
+
+  auto list_itr = (char*)_begin;
+  auto list_end = (char*)_end;
+
+  while (itr < end && *itr != ']') {
+    if (list_itr == list_end) {
+      throw std::runtime_error("list is too long");
+    }
+
+    itr = skip_spaces(itr, end);
+    itr = _cbck(itr, end, list_itr);
+    itr = skip_spaces(itr, end);
+
+    if (*itr != ',') {
+      itr = skip_spaces(itr, end);
+      break;
+    }
+    else {
+      ++itr;
+      itr = skip_spaces(itr, end);
+    }
+
+    list_itr += _item_size;
+  }
+
+  return expect_char(itr, end, ']');
+}
+
+void json_list_cref::to_json(appender_t& appender) const {
+  appender.push('[');
+
+  auto itr = (const char*)_begin;
+  auto end = (const char*)_end;
+
+  if (itr < end) {
+    _cbck(appender, itr);
+    itr += _item_size;
+  }
+
+  while (itr < end) {
+    appender.push(',');
+    _cbck(appender, itr);
+    itr += _item_size;
+  }
+
+  appender.push(']');
+
+}
+
+const char* json_property_ref::from_json(const char* itr, const char* end) {
+  return _cbck(itr, end, _data);
+}
+
+void json_property_cref::to_json(appender_t& appender) const {
+  _cbck(appender, _data);
 }
 
 const char* json_convert_n::from_json(
@@ -299,12 +328,27 @@ void json_convert<int>::to_json(appender_t& appender, int x) {
   appender.push(buffer, buffer + num);
 }
 
-const char* json_convert<double>::from_json(const char*, const char*, double& x) {
-  return nullptr;
+static const auto from_converter =
+  double_conversion::
+    StringToDoubleConverter(
+      double_conversion::StringToDoubleConverter::ALLOW_TRAILING_JUNK,
+      0.0, 0.0, nullptr, nullptr);
+
+const char* json_convert<double>::from_json(const char* itr, const char* end, double& x) {
+  int processed_characters_count = 0;
+  x = from_converter.StringToDouble(itr, end - itr, &processed_characters_count);
+  return itr + processed_characters_count;
 }
 
-void json_convert<double>::to_json(appender_t& appender, double x) {
+static const auto to_converter =
+  double_conversion::
+    DoubleToStringConverter(0, nullptr, nullptr, 'e', -7, 7, 7, 7);
 
+void json_convert<double>::to_json(appender_t& appender, double x) {
+  char buffer[32];
+  auto builder = double_conversion::StringBuilder(buffer, sizeof(buffer));
+  to_converter.ToShortest(x, &builder);
+  appender.push(builder.Finalize());
 }
 
 const char* json_convert<std::string>::from_json(
