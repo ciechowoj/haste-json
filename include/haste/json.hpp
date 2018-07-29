@@ -1,12 +1,21 @@
 #pragma once
 #include <string>
-#include <array>
 #include <type_traits>
 #include <haste/fields_count.hpp>
 #include <utility>
 #include <string_view>
 
 namespace haste::mark2 {
+namespace detail {
+
+template <class T, size_t N> struct array {
+  T data[N ? N : 1];
+  static constexpr size_t size = N;
+};
+
+}
+
+
 
 using std::string;
 using boost::pfr::detail::fields_count;
@@ -206,19 +215,19 @@ template <class T> struct json_convert<T, typename std::enable_if_t<has_json_pro
 
   static void from_json(string_view& json, T& x) {
     auto unpacked = unpack<json_property_ref>(x);
-    return json_convert_n::from_json(json, unpacked.data(), unpacked.data() + unpacked.size());
+    return json_convert_n::from_json(json, unpacked.data, unpacked.data + unpacked.size);
   }
 
   static void to_json(appender_t& appender, const T& x) {
     auto unpacked = unpack<json_property_cref>(x);
-    json_convert_n::to_json(appender, unpacked.data(), unpacked.data() + unpacked.size());
+    json_convert_n::to_json(appender, unpacked.data, unpacked.data + unpacked.size);
   }
 
-  template <class C, class... U> static std::array<C, N> A(U&... x) {
-    return std::array { C(x)... };
+  template <class C, class... U> static auto A(U&... x) {
+    return detail::array<C, N> { C(x)... };
   }
 
-  template <class C, class U> static std::array<C, N> unpack(U&& _v) {
+  template <class C, class U> static auto unpack(U&& _v) {
          if constexpr (N == 0) { return A<C>(); }
     else if constexpr (N == 1) { auto&& [a] = _v; return A<C>(a); }
     else if constexpr (N == 2) { auto&& [a,b] = _v; return A<C>(a,b); }

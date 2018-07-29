@@ -1,5 +1,6 @@
 #include <haste/test>
 #include <haste/json.hpp>
+#include <array>
 #include <iostream>
 
 using namespace haste;
