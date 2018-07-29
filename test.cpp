@@ -47,10 +47,9 @@ unittest("Test has_json_property_type_trait.") {
   static_assert(has_json_property<test_struct>);
   static_assert(!has_json_property<test_struct_no_json>);
   static_assert(has_json_property<dummy_struct_with_string>);
-  // static_assert(has_json_property<std::vector<int>>);
+  static_assert(!has_json_property<std::vector<int>>);
 
   static_assert(std::is_standard_layout<std::vector<int>>::value);
-  std::cout << sizeof(std::vector<int>) * 8 << "\n";
 }
 
 unittest("Serialize simple structure.") {

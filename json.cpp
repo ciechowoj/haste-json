@@ -21,16 +21,26 @@ void appender_t::push(const char* i, const char* e) {
   _storage.append(i, e);
 }
 
+void appender_t::push_key(string_view key) {
+  _storage.push_back('"');
+  _storage.append(key);
+  _storage.append("\":");
+}
+
+void appender_t::push_comma_key(string_view key) {
+  _storage.append(",\"");
+  _storage.append(key);
+  _storage.append("\":");
+}
+
 string appender_t::str() const {
   return _storage;
 }
 
-inline const char* skip_spaces(const char* itr, const char* end) {
-  while (itr < end && std::isspace(*itr)) {
-    ++itr;
+inline void skip_spaces(string_view& json) {
+  while (!json.empty() && std::isspace(json.front())) {
+    json.remove_prefix(1);
   }
-
-  return itr;
 }
 
 inline const char* expect_string(const char* itr, const char* end, const char* chr) {
@@ -45,34 +55,32 @@ inline const char* expect_string(const char* itr, const char* end, const char* c
   return itr;
 }
 
-inline const char* skip_string(const char* itr, const char* end, const char* str) {
-  const char* rollback = itr;
+inline void skip_string(string_view& json, const char* str) {
+  auto rollback = json;
 
-  while (itr < end && *str != '\0' && *itr == *str) {
-    ++itr; ++str;
+  while (!json.empty() && *str != '\0' && json.front() == *str) {
+    json.remove_prefix(1);
+    ++str;
   }
 
   if (*str != '\0') {
-    return rollback;
+    json = rollback;
   }
-
-  return itr;
 }
 
-inline const char* skip_string(const char* itr, const char* end) {
-  while (itr < end && *itr != '"') {
-    ++itr;
+inline void skip_string(string_view& json) {
+  while (!json.empty() && json.front() != '"') {
+    json.remove_prefix(1);
   }
-
-  return itr;
 }
 
-inline const char* expect_char(const char* itr, const char* end, char chr) {
-  if (itr < end && *itr == chr) {
-    return itr + 1;
+inline void expect_char(string_view& json, char chr) {
+  if (!json.empty() && json.front() == chr) {
+    json.remove_prefix(1);
   }
-
-  throw std::runtime_error(chr + std::string(" expected!"));
+  else {
+    throw std::runtime_error(chr + std::string(" expected!"));
+  }
 }
 
 inline const char* skip_char(const char* itr, const char* end, char chr) {
@@ -83,90 +91,86 @@ inline const char* skip_char(const char* itr, const char* end, char chr) {
   return itr;
 }
 
-inline const char* expect_string_literal(const char* itr, const char* end) {
-  itr = expect_char(itr, end, '"');
+inline void expect_string_literal(string_view& json) {
+  expect_char(json, '"');
 
-  while (itr < end && *itr != '"') {
-    ++itr;
+  while (!json.empty() && json.front() != '"') {
+    json.remove_prefix(1);
   }
 
-  if (itr != end) {
-    return itr + 1;
+  if (!json.empty()) {
+    json.remove_prefix(1);
   }
-
-  throw std::runtime_error("String literal expected!");
+  else {
+    throw std::runtime_error("String literal expected!");
+  }
 }
 
-inline const char* expect_json(const char* itr, const char* end) {
-  if (itr < end) {
-    if (*itr == '{') {
-      ++itr;
+inline void expect_json(string_view& json) {
+  if (!json.empty()) {
+    if (json.front() == '{') {
+      json.remove_prefix(1);
 
-      while (itr < end && *itr != '}') {
-        itr = skip_spaces(itr, end);
-        itr = expect_string_literal(itr, end);
-        itr = skip_spaces(itr, end);
-        itr = expect_char(itr, end, ':');
-        itr = skip_spaces(itr, end);
-        itr = expect_json(itr, end);
-        itr = skip_spaces(itr, end);
+      while (!json.empty() && json.front() != '}') {
+        skip_spaces(json);
+        expect_string_literal(json);
+        skip_spaces(json);
+        expect_char(json, ':');
+        skip_spaces(json);
+        expect_json(json);
+        skip_spaces(json);
 
-        if (*itr != '}') {
-          itr = expect_char(itr, end, ',');
+        if (json.front() != '}') {
+          expect_char(json, ',');
         }
       }
 
-      return expect_char(itr, end, '}');
+      expect_char(json, '}');
     }
-    else if (*itr == '[') {
-      ++itr;
-
+    else if (json.front() == '[') {
+      json.remove_prefix(1);
     }
-    else if (isdigit(*itr)) {
-      ++itr;
+    else if (isdigit(json.front())) {
+      json.remove_prefix(1);
 
-      while (itr < end && isdigit(*itr)) {
-        ++itr;
+      while (!json.empty() && isdigit(json.front())) {
+        json.remove_prefix(1);
       }
-
-      return itr;
     }
     else {
       throw std::runtime_error("Json expected!");
     }
   }
-
-  return itr;
 }
 
-const char* json_list_ref::from_json(const char* itr, const char* end) const {
-  itr = expect_char(itr, end, '[');
+void json_list_ref::from_json(string_view& json) const {
+  expect_char(json, '[');
 
   auto list_itr = (char*)_begin;
   auto list_end = (char*)_end;
 
-  while (itr < end && *itr != ']') {
+  while (!json.empty() && json.front() != ']') {
     if (list_itr == list_end) {
       throw std::runtime_error("list is too long");
     }
 
-    itr = skip_spaces(itr, end);
-    itr = _cbck(itr, end, list_itr);
-    itr = skip_spaces(itr, end);
+    skip_spaces(json);
+    _cbck(json, list_itr);
+    skip_spaces(json);
 
-    if (*itr != ',') {
-      itr = skip_spaces(itr, end);
+    if (json.front() != ',') {
+      skip_spaces(json);
       break;
     }
     else {
-      ++itr;
-      itr = skip_spaces(itr, end);
+      json.remove_prefix(1);
+      skip_spaces(json);
     }
 
     list_itr += _item_size;
   }
 
-  return expect_char(itr, end, ']');
+  return expect_char(json, ']');
 }
 
 void json_list_cref::to_json(appender_t& appender) const {
@@ -190,92 +194,95 @@ void json_list_cref::to_json(appender_t& appender) const {
 
 }
 
-const char* json_property_ref::from_json(const char* itr, const char* end) {
-  return _cbck(itr, end, _data);
+void json_property_ref::from_json(string_view& json) {
+  _cbck(json, _data);
 }
 
 void json_property_cref::to_json(appender_t& appender) const {
   _cbck(appender, _data);
 }
 
-const char* json_convert_n::from_json(
-  const char* itr,
-  const char* end,
+void json_convert_n::from_json(
+  string_view& json,
   void* container,
-  const char* (*cbck)(const char*, const char*, void*)) {
-  itr = expect_char(itr, end, '[');
+  void (*cbck)(string_view&, void*)) {
+  expect_char(json, '[');
 
-  while (itr < end && *itr != ']') {
-    itr = skip_spaces(itr, end);
-    itr = cbck(itr, end, container);
-    itr = skip_spaces(itr, end);
+  while (!json.empty() && json.front() != ']') {
+    skip_spaces(json);
+    cbck(json, container);
+    skip_spaces(json);
 
-    if (*itr != ',') {
-      itr = skip_spaces(itr, end);
+    if (json.front() != ',') {
+      skip_spaces(json);
       break;
     }
     else {
-      ++itr;
-      itr = skip_spaces(itr, end);
+      json.remove_prefix(1);
+      skip_spaces(json);
     }
   }
 
-  return expect_char(itr, end, ']');
+  expect_char(json, ']');
 }
 
-const char* json_convert_n::from_json(const char* itr, const char* end, json_property_ref* prop_begin, json_property_ref* prop_end) {
-  itr = skip_spaces(itr, end);
-  itr = expect_char(itr, end, '{');
+void json_convert_n::from_json(string_view& json, json_property_ref* prop_begin, json_property_ref* prop_end) {
+  skip_spaces(json);
+  expect_char(json, '{');
 
-  while (itr < end && *itr != '}') {
-    itr = skip_spaces(itr, end);
-    itr = expect_char(itr, end, '"');
+  while (!json.empty() && json.front() != '}') {
+    skip_spaces(json);
+    auto literal = json;
+    expect_char(json, '"');
 
     auto prop_itr = prop_begin;
 
     for (; prop_itr < prop_end; ++prop_itr) {
-      auto jtr = skip_string(itr, end, prop_itr->name);
+      auto temp = json;
+      skip_string(temp, prop_itr->name);
 
-      if (itr != jtr) {
-        itr = jtr;
+      if (json != temp) {
+        json = temp;
         break;
       }
     }
 
     if (prop_itr == prop_end) {
-      itr = expect_string_literal(itr - 1, end);
-      itr = skip_spaces(itr, end);
-      itr = expect_char(itr, end, ':');
-      itr = skip_spaces(itr, end);
-      itr = expect_json(itr, end);
+      expect_string_literal(literal);
+      json = literal;
+      skip_spaces(json);
+      expect_char(json, ':');
+      skip_spaces(json);
+      expect_json(json);
+
     }
     else {
-      itr = expect_char(itr, end, '"');
-      itr = skip_spaces(itr, end);
-      itr = expect_char(itr, end, ':');
-      itr = skip_spaces(itr, end);
+      expect_char(json, '"');
+      skip_spaces(json);
+      expect_char(json, ':');
+      skip_spaces(json);
 
-      if (itr == end) {
+      if (json.empty()) {
         throw std::runtime_error("Json error!");
       }
       else {
-        itr = prop_itr->from_json(itr, end);
+        prop_itr->from_json(json);
       }
     }
 
-    itr = skip_spaces(itr, end);
+    skip_spaces(json);
 
-    if (*itr != ',') {
-      itr = skip_spaces(itr, end);
+    if (json.front() != ',') {
+      skip_spaces(json);
       break;
     }
     else {
-      ++itr;
-      itr = skip_spaces(itr, end);
+      json.remove_prefix(1);
+      skip_spaces(json);
     }
   }
 
-  return expect_char(itr, end, '}');
+  expect_char(json, '}');
 }
 
 void json_convert_n::to_json(appender_t& appender, const json_property_cref* itr, const json_property_cref* end) {
@@ -296,30 +303,27 @@ void json_convert_n::to_json(appender_t& appender, const json_property_cref* itr
   appender.push('}');
 }
 
-const char* json_convert<int>::from_json(
-  const char* itr,
-  const char* end,
+void json_convert<int>::from_json(
+  string_view& json,
   int& x) {
-  const char* rollback = itr;
+  auto rollback = json;
   int result = 0;
   int sign = 1;
 
-  if (itr < end && *itr == '-') {
+  if (!json.empty() && json.front() == '-') {
     sign = -1;
-    ++itr;
+    json.remove_prefix(1);
   }
 
-  while (itr < end && isdigit(*itr)) {
+  while (!json.empty() && isdigit(json.front())) {
     result *= 10;
-    result += *itr - '0';
-    ++itr;
+    result += json.front() - '0';
+    json.remove_prefix(1);
   }
 
-  if (itr != rollback) {
+  if (json != rollback) {
     x = result * sign;
   }
-
-  return itr;
 }
 
 void json_convert<int>::to_json(appender_t& appender, int x) {
@@ -334,10 +338,10 @@ static const auto from_converter =
       double_conversion::StringToDoubleConverter::ALLOW_TRAILING_JUNK,
       0.0, 0.0, nullptr, nullptr);
 
-const char* json_convert<double>::from_json(const char* itr, const char* end, double& x) {
+void json_convert<double>::from_json(string_view& json, double& x) {
   int processed_characters_count = 0;
-  x = from_converter.StringToDouble(itr, end - itr, &processed_characters_count);
-  return itr + processed_characters_count;
+  x = from_converter.StringToDouble(json.data(), json.size(), &processed_characters_count);
+  json.remove_prefix(processed_characters_count);
 }
 
 static const auto to_converter =
@@ -351,20 +355,20 @@ void json_convert<double>::to_json(appender_t& appender, double x) {
   appender.push(builder.Finalize());
 }
 
-const char* json_convert<std::string>::from_json(
-  const char* itr,
-  const char* end,
+void json_convert<std::string>::from_json(
+  string_view& json,
   std::string& x) {
 
 
-  itr = skip_spaces(itr, end);
-  itr = expect_char(itr, end, '"');
+  skip_spaces(json);
+  expect_char(json, '"');
 
-  while (itr < end && *itr != '"') {
-    x.push_back(*itr++);
+  while (!json.empty() && json.front() != '"') {
+    x.push_back(json.front());
+    json.remove_prefix(1);
   }
 
-  return expect_char(itr, end, '"');
+  expect_char(json, '"');
 }
 
 void json_convert<std::string>::to_json(appender_t& appender, const std::string& x) {

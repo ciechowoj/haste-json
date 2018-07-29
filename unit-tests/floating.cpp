@@ -12,7 +12,7 @@ unittest("Convert floating point values.") {
 
 
 unittest("Convert array of floating point values.") {
-	from_json<std::array<double, 2>>("[1,2]");
-  // assert_eq("[1,2]", to_json(from_json<std::array<double, 2>>("[1,2]")));
+  from_json<std::array<double, 2>>("[1,2]");
+  assert_eq("[1,2]", to_json(from_json<std::array<double, 2>>("[1,2]")));
 }
 

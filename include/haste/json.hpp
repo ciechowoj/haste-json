@@ -2,15 +2,18 @@
 #include <string>
 #include <vector>
 #include <array>
+#include <map>
 #include <type_traits>
 #include <haste/fields_count.hpp>
 #include <utility>
+#include <string_view>
 
 namespace haste::mark2 {
 
 using std::string;
 using std::vector;
 using boost::pfr::detail::fields_count;
+using std::string_view;
 
 using std::enable_if_t;
 using namespace std;
@@ -19,7 +22,12 @@ class appender_t {
 public:
   void push(char x);
   void push(const char* x);
+  void push(const string& x) { push(x.c_str()); }
   void push(const char* i, const char* e);
+
+  void push_key(string_view key);
+  void push_comma_key(string_view key);
+
   std::string str() const;
 private:
   string _storage;
@@ -110,13 +118,13 @@ template <class T> constexpr bool is_json_struct = has_json_property_t<T>::value
 
 struct json_ref_base {
   template <class T> json_ref_base(T*) {
-    this->_cbck = [](const char* i, const char* e, void* p) {
-      return json_convert<T>::from_json(i, e, *((T*)p));
+    this->_cbck = [](string_view& json, void* p) {
+      json_convert<T>::from_json(json, *((T*)p));
     };
   }
 
 protected:
-  const char* (*_cbck)(const char*, const char*, void*);
+  void (*_cbck)(string_view&, void*);
 };
 
 struct json_cref_base {
@@ -137,7 +145,7 @@ struct json_list_ref : private json_ref_base {
     , _begin(begin)
     , _end(end) { }
 
-  const char* from_json(const char*, const char*) const;
+  void from_json(string_view& json) const;
 private:
   size_t _item_size;
   void *_begin, *_end;
@@ -160,16 +168,16 @@ struct json_property_ref {
   template <auto& X, class T> json_property_ref(json_property<X, T>& value)
     : name(value.name) {
     this->_data = &value;
-    this->_cbck = [](const char* i, const char* e, void* p) {
-      return json_convert<T>::from_json(i, e, *((T*)p));
+    this->_cbck = [](string_view& json, void* p) {
+      json_convert<T>::from_json(json, *((T*)p));
     };
   }
 
-  const char* from_json(const char*, const char*);
+  void from_json(string_view& json);
   char const* const name;
 private:
   void* _data;
-  const char* (*_cbck)(const char*, const char*, void*);
+  void (*_cbck)(string_view& json, void*);
 };
 
 struct json_property_cref {
@@ -189,17 +197,19 @@ private:
 };
 
 struct json_convert_n {
-  static const char* from_json(const char*, const char*, void*, const char* (*)(const char*, const char*, void*));
-  static const char* from_json(const char*, const char*, json_property_ref*, json_property_ref*);
+  static void from_json(string_view&, void*, void (*)(string_view&, void*));
+  static void from_json(string_view&, json_property_ref*, json_property_ref*);
   static void to_json(appender_t& appender, const json_property_cref*, const json_property_cref*);
 };
+
+void from_json(const char*&, const char*, void*, void (*)(string_view&, string_view, void*));
 
 template <class T> struct json_convert<T, typename std::enable_if_t<has_json_property<T>> > {
   constexpr static int N = fields_count<std::decay_t<T>>();
 
-  static const char* from_json(const char* itr, const char* end, T& x) {
+  static void from_json(string_view& json, T& x) {
     auto unpacked = unpack<json_property_ref>(x);
-    return json_convert_n::from_json(itr, end, unpacked.data(), unpacked.data() + unpacked.size());
+    return json_convert_n::from_json(json, unpacked.data(), unpacked.data() + unpacked.size());
   }
 
   static void to_json(appender_t& appender, const T& x) {
@@ -233,30 +243,29 @@ template <class T> struct json_convert<T, typename std::enable_if_t<has_json_pro
 };
 
 template <> struct json_convert<int> {
-  static const char* from_json(const char*, const char*, int& x);
+  static void from_json(string_view& json, int& x);
   static void to_json(appender_t& appender, int x);
 };
 
 template <> struct json_convert<double> {
-  static const char* from_json(const char*, const char*, double& x);
+  static void from_json(string_view& json, double& x);
   static void to_json(appender_t& appender, double x);
 };
 
 template <> struct json_convert<std::string> {
-  static const char* from_json(const char*, const char*, std::string& x);
+  static void from_json(string_view& json, std::string& x);
   static void to_json(appender_t& appender, const std::string& x);
 };
 
 template <class T> struct json_convert<vector<T>> {
-  static const char* from_json(const char* itr, const char* end, vector<T>& x) {
+  static void from_json(string_view& json, vector<T>& x) {
     return json_convert_n::from_json(
-      itr,
-      end,
+      json,
       &x,
-      [](const char* i, const char* e, void* c) {
+      [](string_view& json, void* c) {
         auto container = ((vector<T>*)c);
         container->emplace_back();
-        return json_convert<T>::from_json(i, e, container->back());
+        json_convert<T>::from_json(json, container->back());
       });
   }
 
@@ -265,9 +274,45 @@ template <class T> struct json_convert<vector<T>> {
   }
 };
 
+template <class T> struct json_convert<map<string, T>> {
+  static const char* from_json(const char* itr, const char* end, map<string, T>& x) {
+    return json_convert_n::from_json(
+      itr,
+      end,
+      &x,
+      [](const char*& itr, const char* end, string_view key, void* erased) {
+        auto container = ((map<string, T>*)erased);
+        auto value = json_convert<T>::from_json(itr, end);
+        container.insert(make_pair(key, value));
+      });
+  }
+
+  static void to_json(appender_t& appender, const map<string, T>& dict) {
+    appender.push("{");
+
+    auto itr = dict.begin();
+    auto end = dict.end();
+
+    if (itr != end) {
+      appender.push_key(itr->first);
+      json_convert<T>::to_json(appender, itr->second);
+      ++itr;
+    }
+
+    while (itr != end) {
+      appender.push_comma_key(itr->first);
+      json_convert<T>::to_json(appender, itr->second);
+      ++itr;
+    }
+
+    appender.push("}");
+  }
+};
+
+
 template <class T, size_t N> struct json_convert<array<T, N>> {
-  static const char* from_json(const char* itr, const char* end, array<T, N>& x) {
-    return json_list_ref(x.data(), x.data() + x.size()).from_json(itr, end);
+  static void from_json(string_view& json, array<T, N>& x) {
+    json_list_ref(x.data(), x.data() + x.size()).from_json(json);
   }
 
   static void to_json(appender_t& appender, const array<T, N>& x) {
@@ -283,7 +328,8 @@ template <class T> string to_json(const T& x) {
 
 template <class T> T from_json(const string& x) {
   T result;
-  json_convert<T>::from_json(x.data(), x.data() + x.size(), result);
+  string_view view = x;
+  json_convert<T>::from_json(view, result);
   return result;
 }
 
