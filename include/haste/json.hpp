@@ -202,7 +202,7 @@ struct json_convert_n {
   static void to_json(appender_t& appender, const json_property_cref*, const json_property_cref*);
 };
 
-void from_json(const char*&, const char*, void*, void (*)(string_view&, string_view, void*));
+void dict_from_json(string_view&, void*, void (*)(string_view&, string_view, void*));
 
 template <class T> struct json_convert<T, typename std::enable_if_t<has_json_property<T>> > {
   constexpr static int N = fields_count<std::decay_t<T>>();
@@ -275,15 +275,15 @@ template <class T> struct json_convert<vector<T>> {
 };
 
 template <class T> struct json_convert<map<string, T>> {
-  static const char* from_json(const char* itr, const char* end, map<string, T>& x) {
-    return json_convert_n::from_json(
-      itr,
-      end,
+  static void from_json(string_view& json, map<string, T>& x) {
+    dict_from_json(
+      json,
       &x,
-      [](const char*& itr, const char* end, string_view key, void* erased) {
+      [](string_view& json, string_view key, void* erased) {
         auto container = ((map<string, T>*)erased);
-        auto value = json_convert<T>::from_json(itr, end);
-        container.insert(make_pair(key, value));
+        T value;
+        json_convert<T>::from_json(json, value);
+        container->insert(std::make_pair<string, T>(string(key), std::move(value)));
       });
   }
 

@@ -91,15 +91,18 @@ inline const char* skip_char(const char* itr, const char* end, char chr) {
   return itr;
 }
 
-inline void expect_string_literal(string_view& json) {
+inline string_view expect_string_literal(string_view& json) {
   expect_char(json, '"');
+  auto begin = json.data();
 
   while (!json.empty() && json.front() != '"') {
     json.remove_prefix(1);
   }
 
   if (!json.empty()) {
+    auto end = json.data();
     json.remove_prefix(1);
+    return string_view(begin, end - begin);
   }
   else {
     throw std::runtime_error("String literal expected!");
@@ -301,6 +304,34 @@ void json_convert_n::to_json(appender_t& appender, const json_property_cref* itr
   }
 
   appender.push('}');
+}
+
+void dict_from_json(
+  string_view& json,
+  void* erased,
+  void (*cbck)(string_view&, string_view, void*)) {
+  expect_char(json, '{');
+
+  while (!json.empty() && json.front() != '}') {
+    skip_spaces(json);
+    auto key = expect_string_literal(json);
+    skip_spaces(json);
+    expect_char(json, ':');
+
+    cbck(json, key, erased);
+    skip_spaces(json);
+
+    if (json.front() != ',') {
+      skip_spaces(json);
+      break;
+    }
+    else {
+      json.remove_prefix(1);
+      skip_spaces(json);
+    }
+  }
+
+  expect_char(json, '}');
 }
 
 void json_convert<int>::from_json(

@@ -7,19 +7,27 @@ using namespace haste::mark2;
 
 unittest("Convert empty associative array.") {
   assert_eq("{}", to_json(map<string, int> {}));
+  assert_eq("{}", to_json(from_json<map<string, int>>("{}")));
 }
 
 unittest("Convert associative array with one element.") {
   assert_eq("{\"one\":1}", to_json(map<string, int> { { "one", 1 } }));
+  assert_eq("{\"one\":1}", to_json(from_json<map<string, int>>("{\"one\":1}")));
 }
 
 unittest("Convert associative array with multiple elements.") {
   assert_eq(
     "{\"one\":1,\"three\":3,\"two\":2}",
     to_json(map<string, int> { { "one", 1 }, { "two", 2 }, { "three", 3 } }));
+
+  assert_eq(
+    "{\"one\":1,\"three\":3,\"two\":2}",
+    to_json(from_json<map<string, int>>("{\"one\":1,\"three\":3,\"two\":2}")));
 }
 
 unittest("Test") {
+
+
 
 
 
