@@ -1,5 +1,6 @@
 #include <haste/test>
 #include <haste/json.hpp>
+#include <vector>
 #include <iostream>
 
 using namespace haste;

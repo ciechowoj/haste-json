@@ -1,8 +1,6 @@
 #pragma once
 #include <string>
-#include <vector>
 #include <array>
-#include <map>
 #include <type_traits>
 #include <haste/fields_count.hpp>
 #include <utility>
@@ -11,7 +9,6 @@
 namespace haste::mark2 {
 
 using std::string;
-using std::vector;
 using boost::pfr::detail::fields_count;
 using std::string_view;
 
@@ -257,37 +254,97 @@ template <> struct json_convert<std::string> {
   static void to_json(appender_t& appender, const std::string& x);
 };
 
-template <class T> struct json_convert<vector<T>> {
-  static void from_json(string_view& json, vector<T>& x) {
-    return json_convert_n::from_json(
-      json,
-      &x,
-      [](string_view& json, void* c) {
-        auto container = ((vector<T>*)c);
-        container->emplace_back();
-        json_convert<T>::from_json(json, container->back());
-      });
+template <class>
+struct is_array_like {
+  static constexpr int value = false;
+};
+
+template <template <class, size_t> class Q, class T, size_t N>
+struct is_array_like<Q<T, N>> {
+  static constexpr int value = true;
+};
+
+template<typename C>
+struct is_continuous {
+private:
+    struct X {
+      X(const void*, std::size_t);
+      char _[2];
+    };
+
+    template <typename T>
+    static auto check(T*)
+      -> decltype(X(
+        std::declval<T>().data(),
+        std::declval<T>().size()));
+
+    template <typename>
+    static char check(...);
+public:
+    static constexpr bool value = sizeof(decltype(check<C>(0))) != sizeof(char);
+};
+
+template <class T> struct json_convert<T, typename std::enable_if_t<is_continuous<T>::value>> {
+  using value_type = std::decay_t<decltype(std::declval<T>().front())>;
+
+  static void from_json(string_view& json, T& x) {
+    if constexpr (is_array_like<T>::value) {
+      json_list_ref(x.data(), x.data() + x.size()).from_json(json);
+    }
+    else {
+      json_convert_n::from_json(
+        json,
+        &x,
+        [](string_view& json, void* c) {
+          auto container = (T*)c;
+          container->emplace_back();
+          json_convert<value_type>::from_json(json, container->back());
+        });
+    }
   }
 
-  static void to_json(appender_t& appender, const vector<T>& x) {
+  static void to_json(appender_t& appender, const T& x) {
     json_list_cref(x.data(), x.data() + x.size()).to_json(appender);
   }
 };
 
-template <class T> struct json_convert<map<string, T>> {
-  static void from_json(string_view& json, map<string, T>& x) {
+template<typename C>
+struct is_associative {
+private:
+    struct X {
+      template <class A, class B> X(string_view, A, B);
+      char _[2];
+    };
+
+    template <typename T>
+    static auto check(T*)
+      -> decltype(X(
+        std::declval<T>().begin()->first,
+        std::declval<T>().begin()->second,
+        std::declval<T>().end()));
+
+    template <typename>
+    static char check(...);
+public:
+    static constexpr bool value = sizeof(decltype(check<C>(0))) != sizeof(char);
+};
+
+template <class T> struct json_convert<T, typename std::enable_if_t<is_associative<T>::value>> {
+  using value_type = decltype(std::declval<T>().begin()->second);
+
+  static void from_json(string_view& json, T& x) {
     dict_from_json(
       json,
       &x,
       [](string_view& json, string_view key, void* erased) {
-        auto container = ((map<string, T>*)erased);
-        T value;
-        json_convert<T>::from_json(json, value);
-        container->insert(std::make_pair<string, T>(string(key), std::move(value)));
+        auto container = ((T*)erased);
+        value_type value;
+        json_convert<value_type>::from_json(json, value);
+        container->insert(std::make_pair<string, value_type>(string(key), std::move(value)));
       });
   }
 
-  static void to_json(appender_t& appender, const map<string, T>& dict) {
+  static void to_json(appender_t& appender, const T& dict) {
     appender.push("{");
 
     auto itr = dict.begin();
@@ -295,28 +352,17 @@ template <class T> struct json_convert<map<string, T>> {
 
     if (itr != end) {
       appender.push_key(itr->first);
-      json_convert<T>::to_json(appender, itr->second);
+      json_convert<value_type>::to_json(appender, itr->second);
       ++itr;
     }
 
     while (itr != end) {
       appender.push_comma_key(itr->first);
-      json_convert<T>::to_json(appender, itr->second);
+      json_convert<value_type>::to_json(appender, itr->second);
       ++itr;
     }
 
     appender.push("}");
-  }
-};
-
-
-template <class T, size_t N> struct json_convert<array<T, N>> {
-  static void from_json(string_view& json, array<T, N>& x) {
-    json_list_ref(x.data(), x.data() + x.size()).from_json(json);
-  }
-
-  static void to_json(appender_t& appender, const array<T, N>& x) {
-    json_list_cref(x.data(), x.data() + x.size()).to_json(appender);
   }
 };
 
